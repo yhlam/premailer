@@ -1,10 +1,13 @@
 import sys
 import re
 from contextlib import contextmanager
-from StringIO import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 from nose.tools import eq_, ok_
 
-from premailer import Premailer, etree, merge_styles
+from .premailer import Premailer, etree, merge_styles
 from .__main__ import main
 
 

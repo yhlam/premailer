@@ -3,9 +3,16 @@ from lxml import etree
 from lxml.cssselect import CSSSelector
 import os
 import re
-import urllib
-import urlparse
 import operator
+import sys
+
+if sys.version_info < (3, ):
+    import urllib as request
+    import urlparse as parse
+else:
+    from urllib import request
+    from urllib import parse
+    basestring = str
 
 
 __all__ = ['PremailerError', 'Premailer', 'transform']
@@ -62,15 +69,14 @@ def merge_styles(old, new, class_=''):
     groups[class_] = merged
 
     if len(groups) == 1:
-        return '; '.join('%s:%s' % (k, v) for
-                          (k, v) in groups.values()[0])
+        return '; '.join('{}:{}'.format(k, v) for
+                          (k, v) in list(groups.values())[0])
     else:
         all = []
         for class_, mergeable in sorted(groups.items(),
-                                        lambda x, y: cmp(x[0].count(':'),
-                                                         y[0].count(':'))):
-            all.append('%s{%s}' % (class_,
-                                   '; '.join('%s:%s' % (k, v)
+                                        key=lambda x: x[0].count(':')):
+            all.append('{}{{{}}}'.format(class_,
+                                   '; '.join('{}:{}'.format(k, v)
                                               for (k, v)
                                               in mergeable)))
         return ' '.join(x for x in all if x != '{}')
@@ -78,7 +84,7 @@ def merge_styles(old, new, class_=''):
 def make_important(bulk):
     """makes every property in a string !important.
     """
-    return ';'.join('%s !important' % p if not p.endswith('!important') else p
+    return ';'.join('{} !important'.format(p) if not p.endswith('!important') else p
                     for p in bulk.split(';'))
 
 _css_comments = re.compile(r'/\*.*?\*/', re.MULTILINE | re.DOTALL)
@@ -173,7 +179,7 @@ class Premailer(object):
         root = tree if stripped.startswith(tree.docinfo.doctype) else page
 
         if page is None:
-            print repr(self.html)
+            print(repr(self.html))
             raise PremailerError("Could not parse the html")
         assert page is not None
 
@@ -195,7 +201,7 @@ class Premailer(object):
 
             parent_of_style = style.getparent()
             if these_leftover:
-                style.text = '\n'.join(['%s {%s}' % (k, make_important(v)) for
+                style.text = '\n'.join(['{} {{{}}}'.format(k, make_important(v)) for
                                         (k, v) in these_leftover])
                 if self.method == 'xml':
                     style.text = etree.CDATA(style.text)
@@ -205,7 +211,7 @@ class Premailer(object):
         if self.external_styles:
             for stylefile in self.external_styles:
                 if stylefile.startswith('http://'):
-                    css_body = urllib.urlopen(stylefile).read()
+                    css_body = request.urlopen(stylefile).read()
                 elif os.path.exists(stylefile):
                     try:
                         f = codecs.open(stylefile)
@@ -213,8 +219,8 @@ class Premailer(object):
                     finally:
                         f.close()
                 else:
-                    raise ValueError(u"Could not find external style: %s" %
-                                     stylefile)
+                    raise ValueError("Could not find external style: {}"
+                                     .format(stylefile))
                 these_rules, these_leftover = self._parse_style_rules(css_body, -1)
                 rules.extend(these_rules)
 
@@ -229,7 +235,7 @@ class Premailer(object):
             class_ = ''
             if ':' in selector:
                 new_selector, class_ = re.split(':', selector, 1)
-                class_ = ':%s' % class_
+                class_ = ':{}'.format(class_)
             # Keep filter-type selectors untouched.
             if class_ in FILTER_PSEUDOSELECTORS:
                 class_ = ''
@@ -269,19 +275,19 @@ class Premailer(object):
         ##
         if self.base_url:
             for attr in ('href', 'src'):
-                for item in page.xpath("//@%s" % attr):
+                for item in page.xpath("//@{}".format(attr)):
                     parent = item.getparent()
                     if attr == 'href' and self.preserve_internal_links \
                            and parent.attrib[attr].startswith('#'):
                         continue
                     if not self.base_url.endswith('/'):
                         self.base_url += '/'
-                    parent.attrib[attr] = urlparse.urljoin(self.base_url,
+                    parent.attrib[attr] = parse.urljoin(self.base_url,
                         parent.attrib[attr].strip('/'))
 
-        out = etree.tostring(root, method=self.method, pretty_print=pretty_print)
+        out = etree.tostring(root, method=self.method, pretty_print=pretty_print).decode('utf-8')
         if self.method == 'xml':
-            out = _cdata_regex.sub(lambda m: '/*<![CDATA[*/%s/*]]>*/' % m.group(1), out)
+            out = _cdata_regex.sub(lambda m: '/*<![CDATA[*/{}/*]]>*/'.format(m.group(1)), out)
         if self.strip_important:
             out = _importants.sub('', out)
         return out
@@ -348,4 +354,4 @@ if __name__ == '__main__':
         </body>
         </html>"""
     p = Premailer(html)
-    print p.transform()
+    print(p.transform())

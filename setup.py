@@ -26,7 +26,7 @@ long_description = md2stx(long_description)
 
 def find_version(*file_paths):
     version_file = codecs.open(os.path.join(os.path.dirname(__file__),
-                               *file_paths)).read()
+                               *file_paths), 'r').read()
     version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
                               version_file, re.M)
     if version_match:
